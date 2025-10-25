@@ -9,6 +9,7 @@ import (
 
 	"github.com/metacubex/meta-rules-converter/output/meta"
 	"github.com/metacubex/meta-rules-converter/output/sing"
+	"github.com/metacubex/meta-rules-converter/output/surge"
 
 	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
@@ -49,6 +50,7 @@ func ConvertIP(cmd *cobra.Command, inPath string, outType string, outDir string)
 	)
 	countryCIDRs := make(map[string][]string)
 	classicalCIDRs := make(map[string][]string)
+	surgeCIDRs := make(map[string][]string)
 
 	list := router.GeoIPList{}
 	err = proto.Unmarshal(data, &list)
@@ -63,17 +65,23 @@ func ConvertIP(cmd *cobra.Command, inPath string, outType string, outDir string)
 			var (
 				results   []string
 				classical []string
+				surge     []string
 			)
 			for _, cidr := range entry.Cidr {
-				results = append(results, fmt.Sprintf("%s/%d", net.IP(cidr.Ip).String(), cidr.Prefix))
+				cidrStr := fmt.Sprintf("%s/%d", net.IP(cidr.Ip).String(), cidr.Prefix)
+				results = append(results, cidrStr)
 				if outType == "clash" {
-					classical = append(classical, fmt.Sprintf("IP-CIDR,%s/%d", net.IP(cidr.Ip).String(), cidr.Prefix))
+					classical = append(classical, fmt.Sprintf("IP-CIDR,%s", cidrStr))
+				} else if outType == "surge" || outType == "loon" {
+					surge = append(surge, cidrStr)
 				}
 			}
 			mutex.Lock()
 			countryCIDRs[code] = results
 			if outType == "clash" {
 				classicalCIDRs[code] = classical
+			} else if outType == "surge" || outType == "loon" {
+				surgeCIDRs[code] = surge
 			}
 			mutex.Unlock()
 		}(entry)
@@ -133,6 +141,14 @@ func ConvertIP(cmd *cobra.Command, inPath string, outType string, outDir string)
 				},
 			}
 			err = sing.SaveSingRuleSet(ipcidrRule, outDir+"/"+code)
+			if err != nil {
+				fmt.Println(code, " output err: ", err)
+			}
+		}
+	case "surge", "loon":
+		for code, cidrs := range surgeCIDRs {
+			rules := surge.FormatIPRules(cidrs)
+			err = surge.SaveSurgeRuleSet(rules, outDir+"/"+code+".list")
 			if err != nil {
 				fmt.Println(code, " output err: ", err)
 			}

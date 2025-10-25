@@ -8,6 +8,7 @@ import (
 
 	"github.com/metacubex/meta-rules-converter/output/meta"
 	"github.com/metacubex/meta-rules-converter/output/sing"
+	"github.com/metacubex/meta-rules-converter/output/surge"
 
 	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
@@ -34,14 +35,16 @@ func ConvertSite(cmd *cobra.Command, inPath string, outType string, outDir strin
 	os.MkdirAll(outDir, 0777)
 
 	var (
-		domains       = make(map[string][]string)
-		classical     = make(map[string][]string)
-		domainFull    = make(map[string][]string)
-		domainSuffix  = make(map[string][]string)
-		domainKeyword = make(map[string][]string)
-		domainRegex   = make(map[string][]string)
-		wg            sync.WaitGroup
-		mutex         sync.Mutex
+		domains           = make(map[string][]string)
+		classical         = make(map[string][]string)
+		domainFull        = make(map[string][]string)
+		domainSuffix      = make(map[string][]string)
+		domainKeyword     = make(map[string][]string)
+		domainRegex       = make(map[string][]string)
+		surgeDomainFull   = make(map[string][]string)
+		surgeDomainSuffix = make(map[string][]string)
+		wg                sync.WaitGroup
+		mutex             sync.Mutex
 	)
 
 	list := router.GeoSiteList{}
@@ -96,6 +99,9 @@ func ConvertSite(cmd *cobra.Command, inPath string, outType string, outDir strin
 				domainSuffix[code] = s
 				domainKeyword[code] = k
 				domainRegex[code] = r
+			case "surge", "loon":
+				surgeDomainFull[code] = f
+				surgeDomainSuffix[code] = s
 			}
 			mutex.Unlock()
 
@@ -136,6 +142,9 @@ func ConvertSite(cmd *cobra.Command, inPath string, outType string, outDir strin
 					domainSuffix[code+"@"+mark] = ms
 					domainKeyword[code+"@"+mark] = mk
 					domainRegex[code+"@"+mark] = mr
+				case "surge", "loon":
+					surgeDomainFull[code+"@"+mark] = mf
+					surgeDomainSuffix[code+"@"+mark] = ms
 				}
 				mutex.Unlock()
 			}
@@ -196,6 +205,14 @@ func ConvertSite(cmd *cobra.Command, inPath string, outType string, outDir strin
 				},
 			}
 			sing.SaveSingRuleSet(domainRule, outDir+"/"+code)
+		}
+	case "surge", "loon":
+		for code := range surgeDomainFull {
+			rules := surge.FormatDomainRules(surgeDomainFull[code], surgeDomainSuffix[code])
+			err = surge.SaveSurgeRuleSet(rules, outDir+"/"+code+".list")
+			if err != nil {
+				fmt.Println(code, " output err: ", err)
+			}
 		}
 	}
 	return nil
